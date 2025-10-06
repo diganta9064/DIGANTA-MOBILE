@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Purchase / Add Stock</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="app.js"></script>
+</head>
+<body>
+  <div class="nav">
+    <a href="products.html">Products</a>
+    <a href="billing.html">Billing</a>
+    <a href="purchase.html">Purchase</a>
+    <a href="invoices.html">Invoices</a>
+  </div>
+
+  <div class="container">
+    <h1>📥 Purchase</h1>
+
+    <h3>Add Stock to Existing Product</h3>
+    <div class="row">
+      <input id="prodSearch" placeholder="🔍 Search by name, brand, group" style="flex:1">
+    </div>
+    <div class="row">
+      <select id="prodSel"></select>
+      <input id="addQty" type="number" min="1" placeholder="Quantity">
+      <button id="addStockBtn">Add Stock</button>
+    </div>
+
+    <hr>
+
+    <h3>Add a New Product (from Purchase)</h3>
+    <div class="row">
+      <input id="name" placeholder="Name">
+      <input id="brand" placeholder="Brand">
+      <input id="group" placeholder="Group">
+      <input id="cost" type="number" min="0" step="0.01" placeholder="Cost Price">
+      <input id="sell" type="number" min="0" step="0.01" placeholder="Selling Price">
+      <input id="stock" type="number" min="0" step="1" placeholder="Opening Stock">
+      <button id="createBtn">Create Product</button>
+    </div>
+
+    <h4 class="muted">Stocks update the product’s “Modified” date automatically.</h4>
+  </div>
+
+  <script>
+    const $ = (s, r=document)=>r.querySelector(s);
+    let prodFilter = "";
+
+    function loadDrop(){
+      const sel = $("#prodSel"); sel.innerHTML = "";
+      getProducts()
+        .filter(p =>
+          p.name.toLowerCase().includes(prodFilter) ||
+          p.brand?.toLowerCase().includes(prodFilter) ||
+          p.group?.toLowerCase().includes(prodFilter)
+        )
+        .forEach(p=>{
+          const o = document.createElement("option");
+          o.value = p.uid;
+          o.textContent = `${p.name} — Stock: ${p.stock}`;
+          sel.appendChild(o);
+        });
+    }
+
+    $("#prodSearch").addEventListener("input", e => {
+      prodFilter = e.target.value.trim().toLowerCase();
+      loadDrop();
+    });
+
+    $("#addStockBtn").onclick = ()=>{
+      const uid = $("#prodSel").value;
+      const qty = parseInt($("#addQty").value||"0",10);
+      if(!uid || qty<=0) return alert("Select product and enter quantity.");
+      changeStock(uid, qty);
+      $("#addQty").value="";
+      loadDrop();
+      alert("Stock updated!");
+    };
+
+    $("#createBtn").onclick = ()=>{
+      const data = {
+        name: $("#name").value.trim(),
+        brand: $("#brand").value.trim(),
+        group: $("#group").value.trim(),
+        cost: Number($("#cost").value||"0"),
+        sell: Number($("#sell").value||"0"),
+        stock: parseInt($("#stock").value||"0",10)
+      };
+      if(!data.name || !data.brand || !data.group) return alert("Fill name, brand, group.");
+      addProduct(data);
+      ["name","brand","group","cost","sell","stock"].forEach(id=>$("#"+id).value="");
+      loadDrop();
+      alert("Product created.");
+    };
+
+    loadDrop();
+  </script>
+</body>
+</html>

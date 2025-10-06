@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Invoices</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="app.js"></script>
+</head>
+<body>
+  <div class="nav">
+    <a href="products.html">Products</a>
+    <a href="billing.html">Billing</a>
+    <a href="purchase.html">Purchase</a>
+    <a href="invoices.html">Invoices</a>
+  </div>
+
+  <div class="container">
+    <h1>📂 Invoice Manager</h1>
+
+    <table id="tbl">
+      <thead>
+        <tr>
+          <th>No.</th><th>Date</th><th>Customer</th><th>Mobile</th><th>Total</th><th>Actions</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <script>
+    const tbody = document.querySelector("#tbl tbody");
+
+    function render(){
+      const inv = getInvoices();
+      tbody.innerHTML = "";
+      inv.forEach((x, i)=>{
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${x.id}</td>
+          <td>${x.date}</td>
+          <td>${x.customerName}</td>
+          <td>${x.customerMobile}</td>
+          <td>₹${Number(x.total).toFixed(2)}</td>
+          <td>
+            <button data-act="view" data-i="${i}">View</button>
+            <button data-act="print" data-i="${i}">Print</button>
+            <button class="red" data-act="del" data-i="${i}">Delete</button>
+          </td>`;
+        tbody.appendChild(tr);
+      });
+    }
+
+    tbody.addEventListener("click", (e)=>{
+      const btn = e.target.closest("button"); if(!btn) return;
+      const i = parseInt(btn.dataset.i, 10);
+      const inv = getInvoices();
+
+      if(btn.dataset.act==="view"){
+        const x = inv[i];
+        let msg = `Invoice #${x.id}\nDate: ${x.date}\nCustomer: ${x.customerName} (${x.customerMobile})\n\nItems:\n`;
+        x.items.forEach(it => { msg += `• ${it.name} — ${it.qty} × ₹${it.price} = ₹${(it.qty*it.price).toFixed(2)}\n`; });
+        msg += `\nTotal: ₹${Number(x.total).toFixed(2)}`;
+        alert(msg);
+      } else if (btn.dataset.act === "print") {
+        const x = inv[i];
+        printInvoice(x); // Call the new print function
+      } else if(btn.dataset.act==="del"){
+        if(confirm("Do you want to delete this invoice?")){
+          inv.splice(i,1);
+          saveInvoices(inv);
+          render();
+        }
+      }
+    });
+
+    function printInvoice(invoice) {
+      const printWindow = window.open('', '_blank');
+      printWindow.document.write('<html><head><title>Invoice</title>');
+      printWindow.document.write('<style>');
+      printWindow.document.write(`
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        h1 { text-align: center; margin-bottom: 20px; }
+        .invoice-details, .item-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+        .invoice-details td, .item-table th, .item-table td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+        .invoice-details td:first-child { font-weight: bold; width: 120px; }
+        .item-table th { background-color: #f2f2f2; }
+        .total { text-align: right; font-weight: bold; margin-top: 20px; }
+      `);
+      printWindow.document.write('</style>');
+      printWindow.document.write('</head><body>');
+
+      printWindow.document.write('<div style="display:flex;justify-content:left;">');
+      printWindow.document.write('<div style="width:48%;margin-left:0;">');
+      // Business header
+      printWindow.document.write('<div style="text-align:center;margin-bottom:10px;">');
+      printWindow.document.write('<h2 style="margin:0;">DIGANTA MOBILE</h2>');
+      printWindow.document.write('<div style="font-size:16px;font-weight:500;margin-bottom:6px;">(Electrical &amp; Electronics)</div>');
+      printWindow.document.write('<div style="font-size:15px;">Address: New bus Stand, Kalna, Purba Bardhaman, West Bengal 713409</div>');
+      printWindow.document.write('<div style="font-size:15px;">GST No: XXC1223312. Mobile: +919614727273</div>');
+      printWindow.document.write('</div>');
+      // Invoice details
+      printWindow.document.write('<table class="invoice-details">');
+      printWindow.document.write('<tr><td>Date:</td><td>' + invoice.date + '</td></tr>');
+      printWindow.document.write('<tr><td>Customer Name:</td><td>' + invoice.customerName + '</td></tr>');
+      printWindow.document.write('<tr><td>Mobile:</td><td>' + invoice.customerMobile + '</td></tr>');
+      printWindow.document.write('</table>');
+      // Items
+      printWindow.document.write('<table class="item-table">');
+      printWindow.document.write('<thead><tr><th>Item</th><th>Quantity</th><th>Price</th><th>Total</th></tr></thead>');
+      printWindow.document.write('<tbody>');
+      invoice.items.forEach(item => {
+        printWindow.document.write(`
+          <tr>
+            <td>${item.name}</td>
+            <td>${item.qty}</td>
+            <td>₹${Number(item.price).toFixed(2)}</td>
+            <td>₹${(item.qty * item.price).toFixed(2)}</td>
+          </tr>
+        `);
+      });
+      printWindow.document.write('</tbody>');
+      printWindow.document.write('</table>');
+      // Total
+      printWindow.document.write('<div class="total">Grand Total: ₹' + Number(invoice.total).toFixed(2) + '</div>');
+      // Notes
+      printWindow.document.write('<div style="margin-top:40px;font-size:13px;color:#444;">');
+      printWindow.document.write('<strong>Note:</strong><br>');
+      printWindow.document.write('1. Warranty claims are subject to the terms and conditions of the manufacturer\'s warranty policy.<br>');
+      printWindow.document.write('2. Goods once sold will not be taken back or exchanged.<br>');
+      printWindow.document.write('3. Please check the products before leaving the store. We are not responsible for any damage or loss after the product leaves our premises.');
+      printWindow.document.write('</div>');
+      printWindow.document.write('</div>');
+      printWindow.document.close();
+      printWindow.print();
+    }
+
+    render();
+  </script>
+</body>
+</html>

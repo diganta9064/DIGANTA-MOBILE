@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Billing</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="app.js"></script>
+</head>
+<body>
+  <div class="nav">
+    <a href="products.html">Products</a>
+    <a href="billing.html">Billing</a>
+    <a href="purchase.html">Purchase</a>
+    <a href="invoices.html">Invoices</a>
+  </div>
+
+  <div class="container">
+    <h1>🧾 Create Invoice</h1>
+
+    <div class="row">
+      <input id="custName" placeholder="Customer Name" required>
+      <input id="custMobile" placeholder="Mobile No." required> 
+    </div>
+
+    <div class="row">
+      <input id="prodSearch" placeholder="🔍 Search by name, brand, group" style="flex:1">
+    </div>
+    <div class="row">
+  <select id="prodSel"></select>
+  <input id="qty" type="number" min="1" placeholder="Qty">
+  <button id="addBtn">Add Item</button>
+  <button id="manualBtn" class="ghost">Manual Product</button>
+    </div>
+
+    <table>
+      <thead>
+        <tr><th>Item</th><th>Sell Price</th><th>Qty</th><th>Total</th><th>Remove</th></tr>
+      </thead>
+      <tbody id="items"></tbody>
+    </table>
+    <h3 id="grand">Total: ₹0.00</h3>
+
+    <button id="saveBtn">Save Invoice</button>
+  </div>
+
+  <script>
+    const $ = (s, r=document)=>r.querySelector(s);
+    let cart = []; // {uid, name, price, qty}
+    let prodFilter = "";
+
+    // Manual Product handler
+    $("#manualBtn").onclick = () => {
+      const name = prompt("Enter product name:");
+      if (!name) return;
+      const priceStr = prompt("Enter selling price:");
+      const price = Number(priceStr);
+      if (!priceStr || isNaN(price) || price <= 0) return alert("Invalid price.");
+      const qtyStr = prompt("Enter quantity:");
+      const qty = parseInt(qtyStr, 10);
+      if (!qtyStr || isNaN(qty) || qty <= 0) return alert("Invalid quantity.");
+      cart.push({ uid: "manual_" + Date.now(), name, price, qty });
+      renderCart();
+    };
+
+    function loadProductsDrop(){
+      const sel = $("#prodSel"); sel.innerHTML = "";
+      getProducts()
+        .filter(p =>
+          p.name.toLowerCase().includes(prodFilter) ||
+          p.brand?.toLowerCase().includes(prodFilter) ||
+          p.group?.toLowerCase().includes(prodFilter)
+        )
+        .forEach(p=>{
+          const opt = document.createElement("option");
+          opt.value = p.uid;
+          opt.textContent = `${p.name} — ₹${Number(p.sell).toFixed(2)} (Stock: ${p.stock})`;
+          sel.appendChild(opt);
+        });
+    }
+
+    function renderCart(){
+      const tbody = $("#items"); tbody.innerHTML = "";
+      let total = 0;
+      cart.forEach((it, idx)=>{
+        const line = it.price * it.qty; total += line;
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${it.name}</td>
+          <td><input type="number" min="0.01" step="0.01" value="${it.price}" data-pidx="${idx}" class="edit-price" style="width:80px"></td>
+          <td><input type="number" min="1" step="1" value="${it.qty}" data-qidx="${idx}" class="edit-qty" style="width:60px"></td>
+          <td>₹${line.toFixed(2)}</td>
+          <td><button data-i="${idx}" class="red">X</button></td>`;
+        tbody.appendChild(tr);
+      });
+      $("#grand").textContent = "Total: ₹" + total.toFixed(2);
+
+      // Add event listeners for editing price and quantity
+      document.querySelectorAll(".edit-price").forEach(inp => {
+        inp.onchange = function() {
+          const idx = Number(this.dataset.pidx);
+          let val = Number(this.value);
+          if(isNaN(val) || val<=0) { this.value = cart[idx].price; return; }
+          cart[idx].price = val;
+          renderCart();
+        };
+      });
+      document.querySelectorAll(".edit-qty").forEach(inp => {
+        inp.onchange = function() {
+          const idx = Number(this.dataset.qidx);
+          let val = parseInt(this.value,10);
+          if(isNaN(val) || val<=0) { this.value = cart[idx].qty; return; }
+          // If product, check stock
+          const item = cart[idx];
+          const prod = item.uid.startsWith("manual_") ? null : getProducts().find(p=>p.uid===item.uid);
+          if(prod && val > (prod.stock + item.qty)) {
+            alert("Not enough stock!");
+            this.value = cart[idx].qty;
+            return;
+          }
+          // If product, update stock
+          if(prod) changeStock(item.uid, item.qty - val); // return previous qty, subtract new
+          cart[idx].qty = val;
+          renderCart();
+        };
+      });
+    }
+
+    $("#addBtn").onclick = ()=>{
+      const uid = $("#prodSel").value;
+      const qty = parseInt($("#qty").value||"0",10);
+      if(!uid || qty<=0) return alert("Select product and enter quantity.");
+
+      const prod = getProducts().find(p=>p.uid===uid);
+      if(!prod) return;
+      if(qty > prod.stock) return alert("Not enough stock!");
+
+      // add to cart
+      cart.push({ uid, name: prod.name, price: Number(prod.sell), qty });
+      // reduce stock immediately (so dropdown shows updated stock)
+      changeStock(uid, -qty);
+      loadProductsDrop();
+      $("#qty").value = "";
+      renderCart();
+    };
+
+    $("#items").addEventListener("click", (e)=>{
+      const btn = e.target.closest("button"); if(!btn) return;
+      const i = parseInt(btn.dataset.i,10);
+      const it = cart[i];
+      // return stock on removal
+      changeStock(it.uid, it.qty);
+      cart.splice(i,1);
+      loadProductsDrop();
+      renderCart();
+    });
+
+    $("#saveBtn").onclick = ()=>{
+      if(cart.length===0) return alert("No items in invoice.");
+      const customerName = $("#custName").value.trim();
+      const customerMobile = $("#custMobile").value.trim();
+      if(!customerName || !customerMobile) return alert("Enter customer name and mobile.");
+
+      const invoice = addInvoice({
+        customerName, customerMobile,
+        items: cart.map(c=>({ name:c.name, qty:c.qty, price:c.price }))
+      });
+
+      cart = [];
+      renderCart();
+      alert(`Invoice #${invoice.id} saved!`);
+    };
+
+    $("#prodSearch").addEventListener("input", e => {
+      prodFilter = e.target.value.trim().toLowerCase();
+      loadProductsDrop();
+    });
+
+    loadProductsDrop();
+    renderCart();
+  </script>
+</body>
+</html>

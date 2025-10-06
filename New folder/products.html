@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Products</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="app.js"></script>
+</head>
+<body>
+  <div class="nav">
+    <a href="products.html">Products</a>
+    <a href="billing.html">Billing</a>
+    <a href="purchase.html">Purchase</a>
+    <a href="invoices.html">Invoices</a>
+  </div>
+
+  <div class="container">
+    <h1>📦 Product Manager</h1>
+
+    <!-- Add / Edit form -->
+    <form id="form" class="row">
+      <input type="hidden" id="uid">
+      <input id="name" placeholder="Name" required>
+      <input id="brand" placeholder="Brand" required>
+      <input id="group" placeholder="Group" required>
+      <input id="cost" type="number" min="0" step="0.01" placeholder="Cost Price" required>
+      <input id="sell" type="number" min="0" step="0.01" placeholder="Selling Price" required>
+      <input id="stock" type="number" min="0" step="1" placeholder="Stock" required>
+      <button type="submit">Save</button>
+      <button type="button" class="ghost" id="resetBtn">Reset</button>
+    </form>
+
+    <hr>
+
+    <!-- Search + Import/Export -->
+    <div class="row">
+      <input id="search" placeholder="🔍 Search by name, brand, group" style="flex:1">
+      <button id="exportBtn" type="button">Export CSV</button>
+      <label class="ghost" style="display:inline-flex;align-items:center;gap:8px;cursor:pointer;">
+        <span class="badge">Import CSV</span>
+        <input id="importFile" type="file" accept=".csv" style="display:none">
+      </label>
+    </div>
+
+    <table id="tbl">
+      <thead>
+        <tr>
+          <th><input type="checkbox" id="selectAll"></th>
+          <th>Serial</th>
+          <th>Name</th>
+          <th>Brand</th>
+          <th>Group</th>
+          <th>Cost</th>
+          <th>Sell</th>
+          <th>Stock</th>
+          <th>Modified</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+    <button id="deleteSelectedBtn" class="red" style="margin-top:10px;">Delete Selected</button>
+
+    <p class="muted">Tip: Search filters the table but actions remain correct because they use a stable product UID.</p>
+  </div>
+
+  <script>
+    const $ = (s, r=document) => r.querySelector(s);
+    const $$ = (s, r=document) => Array.from(r.querySelectorAll(s));
+    const tbody = $("#tbl tbody");
+    const form = $("#form");
+    const search = $("#search");
+
+    function currentFiltered(){
+      const q = search.value.trim().toLowerCase();
+      const list = getProducts();
+      if(!q) return list;
+      return list.filter(p =>
+        p.name.toLowerCase().includes(q) ||
+        p.brand.toLowerCase().includes(q) ||
+        p.group.toLowerCase().includes(q)
+      );
+    }
+
+    function render(){
+      const list = currentFiltered();
+      tbody.innerHTML = "";
+      list.forEach((p, i) => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td><input type="checkbox" class="rowChk" data-uid="${p.uid}"></td>
+          <td>${i+1}</td>
+          <td>${p.name}</td>
+          <td>${p.brand}</td>
+          <td>${p.group}</td>
+          <td>₹${Number(p.cost).toFixed(2)}</td>
+          <td>₹${Number(p.sell).toFixed(2)}</td>
+          <td>${p.stock}</td>
+          <td>${p.modified}</td>
+          <td>
+            <button data-act="edit" data-uid="${p.uid}">Edit</button>
+            <button class="red" data-act="del" data-uid="${p.uid}">Delete</button>
+          </td>`;
+        tbody.appendChild(tr);
+      });
+      // Reset selectAll checkbox if no rows
+      $("#selectAll").checked = false;
+    }
+
+    // Submit add/edit
+    form.addEventListener("submit", (e)=>{
+      e.preventDefault();
+      const data = {
+        name: $("#name").value.trim(),
+        brand: $("#brand").value.trim(),
+        group: $("#group").value.trim(),
+        cost: Number($("#cost").value),
+        sell: Number($("#sell").value),
+        stock: parseInt($("#stock").value || "0", 10)
+      };
+      const id = $("#uid").value;
+      if(id){
+        updateProduct(id, data);
+      }else{
+        addProduct(data);
+      }
+      form.reset(); $("#uid").value="";
+      render();
+    });
+    $("#resetBtn").onclick = ()=>{ form.reset(); $("#uid").value=""; };
+
+    // Table actions (edit/delete) using UID — works with search results
+    tbody.addEventListener("click", (e)=>{
+      const btn = e.target.closest("button"); if(!btn) return;
+      const id = btn.dataset.uid;
+      if(btn.dataset.act === "edit"){
+        const p = getProducts().find(x=>x.uid===id);
+        if(!p) return;
+        $("#uid").value = p.uid;
+        $("#name").value = p.name;
+        $("#brand").value = p.brand;
+        $("#group").value = p.group;
+        $("#cost").value = p.cost;
+        $("#sell").value = p.sell;
+        $("#stock").value = p.stock;
+        window.scrollTo({top:0, behavior:"smooth"});
+      }else if(btn.dataset.act === "del"){
+        if(confirm("Do you want to delete this item?")){
+          deleteProduct(id);
+          render();
+        }
+      }
+    });
+
+    // Select All functionality
+    $("#selectAll").addEventListener("change", function() {
+      $$(".rowChk").forEach(chk => chk.checked = this.checked);
+    });
+
+    // Uncheck selectAll if any row is unchecked
+    tbody.addEventListener("change", function(e) {
+      if(e.target.classList.contains("rowChk")) {
+        if(!e.target.checked) $("#selectAll").checked = false;
+        else if($$(".rowChk").every(chk => chk.checked)) $("#selectAll").checked = true;
+      }
+    });
+
+    // Bulk delete
+    $("#deleteSelectedBtn").onclick = function() {
+      const selected = $$(".rowChk").filter(chk => chk.checked).map(chk => chk.dataset.uid);
+      if(selected.length === 0) return alert("No products selected.");
+      if(confirm(`Delete ${selected.length} selected product(s)? This cannot be undone.`)){
+        selected.forEach(uid => deleteProduct(uid));
+        render();
+      }
+    };
+
+    // Search live
+    search.addEventListener("input", render);
+
+    // Export
+    $("#exportBtn").onclick = ()=>{
+      download("products.csv", productsToCSV(getProducts()), "text/csv");
+    };
+
+    // Import
+    $("#importFile").addEventListener("change", async (e)=>{
+      const file = e.target.files[0]; if(!file) return;
+      const text = await file.text();
+      const imported = importCSV(text);
+      const existing = getProducts();
+      // Merge by UID if exists, else append
+      const map = new Map(existing.map(p=>[p.uid,p]));
+      imported.forEach(p=>{
+        if(map.has(p.uid)) map.set(p.uid, { ...map.get(p.uid), ...p, modified: nowStr() });
+        else map.set(p.uid, p);
+      });
+      saveProducts(Array.from(map.values()));
+      e.target.value = "";
+      render();
+      alert("Products imported successfully!");
+    });
+
+    // First render
+    render();
+  </script>
+</body>
+</html>
